@@ -23,29 +23,18 @@
 # 					 `validation_functions` ]
 
 ####################### IMPORT MODULES #######################
-import pandas 
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 import torch
-import numpy 
-###################### Additional Imports ####################
-'''
-You can import any additional modules that you require from 
-torch, matplotlib or sklearn. 
-You are NOT allowed to import any other libraries. It will 
-cause errors while running the executable
-'''
-##############################################################
-
-################# ADD UTILITY FUNCTIONS HERE #################
-
-
-
-
-
+from torch.utils.data import TensorDataset, DataLoader
+import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
 ##############################################################
 
 def data_preprocessing(task_1a_dataframe):
 
-	''' 
+    ''' 
 	Purpose:
 	---
 	This function will be used to load your csv dataset and preprocess it.
@@ -73,14 +62,30 @@ def data_preprocessing(task_1a_dataframe):
 	encoded_dataframe = data_preprocessing(task_1a_dataframe)
 	'''
 
-	#################	ADD YOUR CODE HERE	##################
+    #################	ADD YOUR CODE HERE	##################
+    df = task_1a_dataframe
 
-	##########################################################
+    
+    df['Education'].replace({"Bachelors":0,"Masters":1,"PHD":2},inplace=True)
+    df['City'].replace({"Bangalore":0,"New Delhi":1,"Pune":2},inplace=True)
+    df['Gender'].replace({"Male":0,"Female":1},inplace=True)
+    df['EverBenched'].replace({"No":0,"Yes":1},inplace=True)
+    MinMx = MinMaxScaler()
+    Scaled_columns = ['Age', 'JoiningYear']
+    df[Scaled_columns] = MinMx.fit_transform(df[Scaled_columns])
 
-	return encoded_dataframe
+    
+    # Display the encoded DataFrame
+    #df_encoded = df_encoded.astype(int)
+    
+    encoded_dataframe = df
+    ##########################################################
+
+    return encoded_dataframe
+
 
 def identify_features_and_targets(encoded_dataframe):
-	'''
+    '''
 	Purpose:
 	---
 	The purpose of this function is to define the features and
@@ -105,16 +110,21 @@ def identify_features_and_targets(encoded_dataframe):
 	features_and_targets = identify_features_and_targets(encoded_dataframe)
 	'''
 
-	#################	ADD YOUR CODE HERE	##################
-	
-	##########################################################
+    #################	ADD YOUR CODE HERE	##################
+    features = encoded_dataframe.drop(columns=['LeaveOrNot'])
+    target = encoded_dataframe['LeaveOrNot']
 
-	return features_and_targets
+    features_and_targets = [features, target]
+
+    ##########################################################
+    
+
+    return features_and_targets
 
 
 def load_as_tensors(features_and_targets):
-
-	''' 
+    
+    ''' 
 	Purpose:
 	---
 	This function aims at loading your data (both training and validation)
@@ -145,15 +155,30 @@ def load_as_tensors(features_and_targets):
 	---
 	tensors_and_iterable_training_data = load_as_tensors(features_and_targets)
 	'''
+    #################	ADD YOUR CODE HERE	##################
+    [X, y] = features_and_targets
+    X = X.values
+    y = y.values
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
 
-	#################	ADD YOUR CODE HERE	##################
-	
-	##########################################################
 
-	return tensors_and_iterable_training_data
+    X_train_tensor = torch.FloatTensor(X_train)
+    X_test_tensor = torch.FloatTensor(X_test)
+    y_train_tensor = torch.LongTensor(y_train)
+    y_test_tensor = torch.LongTensor(y_test)
+    
+    train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+    batch_size = 160 # You can adjust the batch size as needed
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    tensors_and_iterable_training_data = [X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor, train_loader]
+    ##########################################################
 
-class Salary_Predictor():
-	'''
+    return tensors_and_iterable_training_data
+
+class Salary_Predictor(nn.Module):
+    '''
 	Purpose:
 	---
 	The architecture and behavior of your neural network model will be
@@ -168,27 +193,25 @@ class Salary_Predictor():
 	---
 	`predicted_output` : Predicted output for the given input data
 	'''
-	def __init__(self):
-		super(Salary_Predictor, self).__init__()
-		'''
-		Define the type and number of layers
-		'''
-		#######	ADD YOUR CODE HERE	#######
-		
-		###################################	
+    def __init__(self, input_features=8, hidden1=80, hidden2=80, output_features=1):
+        super(Salary_Predictor, self).__init__()
+        self.fc1 = nn.Linear(input_features, hidden1)
+        self.fc2 = nn.Linear(hidden1, hidden2)
+        self.out = nn.Linear(hidden2, output_features)
 
-	def forward(self, x):
-		'''
-		Define the activation functions
-		'''
-		#######	ADD YOUR CODE HERE	#######
-		
-		###################################
+    def forward(self, x):
+        #x = x.requires_grad_()
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        '''x = F.sigmoid(self.out(x))
+        x = (x >= 0.5).float().requires_grad_()'''
+        x = self.out(x)
+        #x = x.long()
 
-		return predicted_output
+        return x
 
 def model_loss_function():
-	'''
+    '''
 	Purpose:
 	---
 	To define the loss function for the model. Loss function measures 
@@ -208,14 +231,14 @@ def model_loss_function():
 	---
 	loss_function = model_loss_function()
 	'''
-	#################	ADD YOUR CODE HERE	##################
-	
-	##########################################################
-	
-	return loss_function
+    loss_function = nn.MSELoss()
+    
+    return loss_function
+
+
 
 def model_optimizer(model):
-	'''
+    '''
 	Purpose:
 	---
 	To define the optimizer for the model. Optimizer is responsible 
@@ -234,14 +257,12 @@ def model_optimizer(model):
 	---
 	optimizer = model_optimizer(model)
 	'''
-	#################	ADD YOUR CODE HERE	##################
-
-	##########################################################
-
-	return optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    
+    return optimizer
 
 def model_number_of_epochs():
-	'''
+    '''
 	Purpose:
 	---
 	To define the number of epochs for training the model
@@ -258,14 +279,13 @@ def model_number_of_epochs():
 	---
 	number_of_epochs = model_number_of_epochs()
 	'''
-	#################	ADD YOUR CODE HERE	##################
+    number_of_epochs=20
+    
+    return number_of_epochs
 
-	##########################################################
-
-	return number_of_epochs
 
 def training_function(model, number_of_epochs, tensors_and_iterable_training_data, loss_function, optimizer):
-	'''
+    '''
 	Purpose:
 	---
 	All the required parameters for training are passed to this function.
@@ -287,15 +307,48 @@ def training_function(model, number_of_epochs, tensors_and_iterable_training_dat
 	---
 	trained_model = training_function(model, number_of_epochs, iterable_training_data, loss_function, optimizer)
 
-	'''	
-	#################	ADD YOUR CODE HERE	##################
-	
-	##########################################################
+	'''
+    training_data = TensorDataset(tensors_and_iterable_training_data[0],tensors_and_iterable_training_data[2])
+    training_loader = tensors_and_iterable_training_data[4]
+    #training_loader = DataLoader(training_data, batch_size=64, shuffle=True)
 
-	return trained_model
+    #validation_loader = torch.utils.data.DataLoader(validation_data, batch_size=64, shuffle=True)
+    for epoch in range(number_of_epochs):
+        running_loss = 0.0
+        for i, data in enumerate(training_loader, 0):
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+            # print(i)
+            # zero the parameter gradients
+            optimizer.zero_grad()
+            labels = labels.unsqueeze(1)
+            
+            # forward + backward + optimize 
+            outputs = model(inputs)
+            
+            # print(outputs)
+            loss = loss_function(outputs.float(), labels.float())
+            # Backward pass
+            loss.backward()
+            # Update model parameters
+            optimizer.step()
+
+            # print statistics
+            running_loss += loss.item()
+        average_loss = running_loss / len(training_loader)
+        
+        # Print epoch-wise loss
+        print(f"Epoch {epoch+1}/{number_of_epochs}: Loss = {average_loss}")
+            # if i % 2000 == 1999:    # print every 2000 mini-batches
+            #     print('[%d, %5d] loss: %.3f' %
+            #           (epoch + 1, i + 1, running_loss / 2000))
+            #     running_loss = 0.0
+
+           
+    return model
 
 def validation_function(trained_model, tensors_and_iterable_training_data):
-	'''
+    '''
 	Purpose:
 	---
 	This function will utilise the trained model to do predictions on the
@@ -316,12 +369,31 @@ def validation_function(trained_model, tensors_and_iterable_training_data):
 	---
 	model_accuracy = validation_function(trained_model, tensors_and_iterable_training_data)
 
-	'''	
-	#################	ADD YOUR CODE HERE	##################
+	'''
 
-	##########################################################
+    # Set the model to evaluation mode
+    trained_model.eval()
+    
+    # Unpack the input arguments
+    validation_data = tensors_and_iterable_training_data[1]
+    validation_labels = tensors_and_iterable_training_data[3]
+    # Calculate the predictions of the trained model on the validation data
+    with torch.no_grad():
+        predictions = trained_model(validation_data)
+        
+    # Convert the predicted probabilities to class labels
+    _, predicted_labels = torch.max(predictions, 1)
+    #print(predicted_labels)
+    #print(validation_labels)
+    #print(predicted_labels==validation_labels)
 
-	return model_accuracy
+    # Calculate the accuracy of the model
+    correct_predictions = (predicted_labels == validation_labels).sum().item()
+    total_predictions = len(validation_labels)
+    model_accuracy = correct_predictions / total_predictions
+
+    
+    return model_accuracy
 
 ########################################################################
 ########################################################################
@@ -334,15 +406,16 @@ def validation_function(trained_model, tensors_and_iterable_training_data):
 	of the script
 
 '''
+
 if __name__ == "__main__":
 
 	# reading the provided dataset csv file using pandas library and 
 	# converting it to a pandas Dataframe
-	task_1a_dataframe = pandas.read_csv('task_1a_dataset.csv')
+	task_1a_dataframe = pd.read_csv('task_1a_dataset.csv')
 
 	# data preprocessing and obtaining encoded data
 	encoded_dataframe = data_preprocessing(task_1a_dataframe)
-
+    
 	# selecting required features and targets
 	features_and_targets = identify_features_and_targets(encoded_dataframe)
 
@@ -369,3 +442,4 @@ if __name__ == "__main__":
 	X_train_tensor = tensors_and_iterable_training_data[0]
 	x = X_train_tensor[0]
 	jitted_model = torch.jit.save(torch.jit.trace(model, (x)), "task_1a_trained_model.pth")
+
